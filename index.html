@@ -82,6 +82,11 @@
     .img-block{margin:10px 0;position:relative;display:block}
     .img-block img{max-width:100%;display:block;border-radius:12px}
     .img-del{position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.6);border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;color:#fff;font-size:14px;display:flex;align-items:center;justify-content:center}
+    /* 사진 압축 중 로딩 */
+    .img-loading{display:flex;align-items:center;gap:8px;padding:12px;background:var(--border2);border-radius:12px;margin:8px 0;font-size:13px;color:var(--text2)}
+    .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .img-size-badge{display:inline-block;font-size:11px;color:var(--text3);margin-top:4px}
     .editor-toolbar{padding:10px 14px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));border-top:0.5px solid var(--border);display:flex;gap:8px;align-items:center;background:var(--card);flex-shrink:0;transition:background .25s}
     .tb-btn{border:0.5px solid var(--border);background:none;border-radius:10px;padding:9px 14px;font-size:14px;cursor:pointer;color:var(--text2);display:flex;align-items:center;gap:6px}
     .tb-btn i{font-size:17px;color:var(--accent)}
@@ -98,19 +103,25 @@
     .toggle.on{background:var(--accent)}
     .toggle::after{content:'';width:20px;height:20px;border-radius:50%;background:#fff;position:absolute;top:3px;left:3px;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,0.3)}
     .toggle.on::after{left:21px}
-    /* 백업 안내 박스 */
     .info-box{background:rgba(91,95,217,0.08);border:0.5px solid rgba(91,95,217,0.25);border-radius:12px;padding:12px 14px;margin-bottom:6px;font-size:13px;color:var(--text2);line-height:1.6}
     .info-box strong{color:var(--accent)}
+    /* 사진 화질 선택 슬라이더 */
+    .quality-row{padding:14px 16px;background:var(--card);border:0.5px solid var(--border);border-radius:12px;margin-bottom:6px}
+    .quality-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+    .quality-top i{font-size:20px;color:var(--accent)}
+    .quality-label{flex:1;font-size:15px;color:var(--text)}
+    .quality-val{font-size:14px;font-weight:600;color:var(--accent);min-width:36px;text-align:right}
+    .quality-desc{font-size:12px;color:var(--text3);margin-top:6px}
+    input[type=range]{width:100%;accent-color:var(--accent)}
     .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:50;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
     .modal-bg.open{opacity:1;pointer-events:auto}
     .modal{background:var(--card);border-radius:20px 20px 0 0;padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));width:100%;max-width:480px;transition:background .25s}
     .modal h3{font-size:17px;font-weight:600;margin-bottom:14px;color:var(--text)}
-    .modal input{width:100%;border:0.5px solid var(--border);border-radius:10px;padding:11px 12px;font-size:16px;background:var(--bg);color:var(--text);outline:none;margin-bottom:12px}
+    .modal input[type=text]{width:100%;border:0.5px solid var(--border);border-radius:10px;padding:11px 12px;font-size:16px;background:var(--bg);color:var(--text);outline:none;margin-bottom:12px}
     .modal-btns{display:flex;gap:10px}
     .modal-btns button{flex:1;padding:13px;border-radius:12px;border:none;font-size:15px;cursor:pointer;font-weight:500}
     .btn-cancel{background:var(--border2);color:var(--text2)}
     .btn-confirm{background:var(--accent);color:#fff}
-    /* 가져오기 성공 메시지 */
     .import-result{display:none;margin-top:8px;padding:10px 14px;border-radius:10px;font-size:13px;font-weight:500}
     .import-result.ok{background:rgba(29,158,117,0.12);color:#0F6E56;display:block}
     .import-result.err{background:rgba(226,75,74,0.12);color:#A32D2D;display:block}
@@ -164,14 +175,50 @@ const STORAGE_KEY='memoapp_v1';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,6);
 const esc=s=>s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):'';
 const fmt=d=>{if(!d)return'';const now=new Date(),df=now-d;if(df<60000)return'방금 전';if(df<3600000)return Math.floor(df/60000)+'분 전';if(df<86400000)return Math.floor(df/3600000)+'시간 전';return(d.getMonth()+1)+'월 '+d.getDate()+'일 '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
+const fmtSize=b=>{if(b<1024)return b+'B';if(b<1024*1024)return Math.round(b/1024)+'KB';return(b/1024/1024).toFixed(1)+'MB';};
 
-function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify({folders:S.folders,memos:S.memos,dark:dark}));}catch(e){}}
+// 사진 화질 설정 (기본값: 75%)
+let imgQuality = 0.75;
+
+// ── 사진 압축 핵심 함수 ──────────────────────────────
+// 긴 쪽을 최대 1600px로 줄이고, 화질은 설정값으로 압축
+function compressImage(file) {
+  return new Promise(resolve => {
+    const MAX = 1600;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        // 크기가 MAX보다 크면 비율 유지하며 줄이기
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const compressed = canvas.toDataURL('image/jpeg', imgQuality);
+        // 압축 전후 크기 계산
+        const originalKB = Math.round(file.size / 1024);
+        const compressedKB = Math.round((compressed.length * 3) / 4 / 1024);
+        resolve({ data: compressed, originalKB, compressedKB, w, h });
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify({folders:S.folders,memos:S.memos,dark,imgQuality}));}catch(e){}}
 function load(){
   try{
     const d=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');
     S.folders=d.folders||[{id:'f1',name:'업무',icon:'ti-briefcase'},{id:'f2',name:'개인',icon:'ti-user'},{id:'f3',name:'아이디어',icon:'ti-bulb'}];
     S.memos=(d.memos||[]).map(m=>({...m,date:new Date(m.date)}));
     if(d.dark)setDark(true);
+    if(d.imgQuality)imgQuality=d.imgQuality;
   }catch(e){}
 }
 
@@ -187,31 +234,23 @@ document.getElementById('toastDel').onclick=()=>{if(!pendingDelId)return;S.memos
 
 let S={view:'list',currentFolder:null,currentMemo:null,folderEdit:false,folders:[],memos:[]};
 
-// ── 백업 / 가져오기 ──
 function exportData(){
   const blob=new Blob([JSON.stringify({folders:S.folders,memos:S.memos},null,2)],{type:'application/json'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
   const today=new Date();
   a.download=`메모장백업_${today.getFullYear()}${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}.json`;
   a.click();
 }
-
 function importData(){document.getElementById('importPicker').click();}
-
 document.getElementById('importPicker').onchange=function(){
   const file=this.files[0];if(!file)return;
   const reader=new FileReader();
   reader.onload=e=>{
     try{
       const data=JSON.parse(e.target.result);
-      if(!data.folders||!data.memos)throw new Error('형식 오류');
-      S.folders=data.folders;
-      S.memos=data.memos.map(m=>({...m,date:new Date(m.date)}));
-      save();
-      renderAll();
-      // 설정 화면 다시 그려서 결과 표시
-      showSettings();
+      if(!data.folders||!data.memos)throw new Error();
+      S.folders=data.folders;S.memos=data.memos.map(m=>({...m,date:new Date(m.date)}));
+      save();renderAll();showSettings();
       const r=document.getElementById('importResult');
       if(r){r.className='import-result ok';r.textContent=`✅ 성공! 메모 ${S.memos.length}개, 폴더 ${S.folders.length}개를 불러왔어요.`;}
     }catch(err){
@@ -219,11 +258,9 @@ document.getElementById('importPicker').onchange=function(){
       if(r){r.className='import-result err';r.textContent='❌ 파일을 읽을 수 없어요. 백업 파일이 맞는지 확인해주세요.';}
     }
   };
-  reader.readAsText(file);
-  this.value='';
+  reader.readAsText(file);this.value='';
 };
 
-// ── 모달 ──
 let mMode='add',mTarget=null;
 function openModal(mode,id='',cur=''){mMode=mode;mTarget=id;document.getElementById('modalTitle').textContent=mode==='add'?'새 폴더':'폴더 이름 변경';document.getElementById('modalInput').value=cur;document.getElementById('modal').classList.add('open');setTimeout(()=>document.getElementById('modalInput').focus(),80);}
 function closeModal(){document.getElementById('modal').classList.remove('open');document.getElementById('modalInput').value='';}
@@ -231,7 +268,6 @@ document.getElementById('modalConfirm').onclick=()=>{const name=document.getElem
 document.getElementById('modalInput').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('modalConfirm').click();});
 document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)closeModal();});
 
-// ── 사이드바 ──
 function renderFolders(filter=''){
   const list=document.getElementById('folderList');
   const items=[{id:'all',name:'전체 메모',icon:'ti-notes'},...S.folders].filter(f=>f.id==='all'||f.name.includes(filter));
@@ -262,7 +298,13 @@ function closeSB(){document.getElementById('sidebar').classList.remove('open');d
 document.getElementById('overlay').onclick=closeSB;
 document.getElementById('menuBtn').onclick=()=>{renderFolders();openSB();};
 
-// ── 메인 ──
+function getQualityLabel(q){
+  if(q>=0.9)return'최고화질 (용량 큼)';
+  if(q>=0.75)return'고화질 (권장)';
+  if(q>=0.55)return'보통 (용량 절약)';
+  return'저화질 (용량 최소)';
+}
+
 function renderMain(){
   const mc=document.getElementById('mainContent'),hT=document.getElementById('headerTitle'),hR=document.getElementById('headerRightBtn');
   if(S.view==='list'){
@@ -280,6 +322,7 @@ function renderMain(){
     const ta=document.getElementById('edContent');ta.style.height='auto';ta.style.height=ta.scrollHeight+'px';ta.oninput=function(){this.style.height='auto';this.style.height=this.scrollHeight+'px';};
   } else if(S.view==='settings'){
     hT.textContent='설정';hR.innerHTML='<i class="ti ti-arrow-left"></i>';hR.onclick=()=>{S.view='list';renderMain();};
+    const qPct=Math.round(imgQuality*100);
     mc.innerHTML=`<div class="settings-view">
       <div class="settings-section">
         <div class="settings-section-title">표시</div>
@@ -289,19 +332,35 @@ function renderMain(){
         </div>
       </div>
       <div class="settings-section">
+        <div class="settings-section-title">📷 사진 화질</div>
+        <div class="info-box">
+          사진을 넣을 때 자동으로 용량을 줄여줘요.<br>
+          <strong>고화질(권장)</strong>이면 눈으로 봤을 때 거의 차이 없어요.<br>
+          원본 5MB 사진 → 약 <strong>300~500KB</strong>로 줄어들어요.
+        </div>
+        <div class="quality-row">
+          <div class="quality-top">
+            <i class="ti ti-photo"></i>
+            <span class="quality-label">사진 화질</span>
+            <span class="quality-val" id="qVal">${qPct}%</span>
+          </div>
+          <input type="range" min="30" max="95" step="5" value="${qPct}" id="qSlider"
+            oninput="updateQuality(this.value)">
+          <div class="quality-desc" id="qDesc">${getQualityLabel(imgQuality)}</div>
+        </div>
+      </div>
+      <div class="settings-section">
         <div class="settings-section-title">📦 백업 &amp; 가져오기</div>
         <div class="info-box">
-          폰을 바꿀 때 👉 <strong>백업 저장</strong> → 카카오톡 나에게 보내기 또는 구글 드라이브 저장<br>
+          폰을 바꿀 때 👉 <strong>백업 저장</strong> → 카카오톡 나에게 보내기<br>
           새 폰에서 👉 <strong>가져오기</strong> 버튼으로 그 파일 선택하면 복구 완료!
         </div>
         <div class="setting-row" onclick="exportData()">
-          <i class="ti ti-download"></i>
-          <span class="setting-label">백업 저장하기</span>
+          <i class="ti ti-download"></i><span class="setting-label">백업 저장하기</span>
           <span class="setting-value" style="font-size:12px">파일로 저장</span>
         </div>
         <div class="setting-row" onclick="importData()">
-          <i class="ti ti-upload"></i>
-          <span class="setting-label">가져오기 (복구)</span>
+          <i class="ti ti-upload"></i><span class="setting-label">가져오기 (복구)</span>
           <span class="setting-value" style="font-size:12px">백업 파일 선택</span>
         </div>
         <div id="importResult" class="import-result"></div>
@@ -313,6 +372,13 @@ function renderMain(){
       </div>
     </div>`;
   }
+}
+
+function updateQuality(v){
+  imgQuality=v/100;
+  const el=document.getElementById('qVal');if(el)el.textContent=v+'%';
+  const desc=document.getElementById('qDesc');if(desc)desc.textContent=getQualityLabel(imgQuality);
+  save();
 }
 
 function showSettings(){closeSB();S.view='settings';renderMain();}
@@ -336,17 +402,50 @@ function filterMemos(v){const base=getMemos();renderMemoItems(v?base.filter(m=>m
 function newMemo(){const fid=S.currentFolder||(S.folders[0]?S.folders[0].id:null);if(!fid)return;const m={id:uid(),folder:fid,title:'',content:'',images:[],date:new Date()};S.memos.push(m);S.currentMemo=m;S.view='editor';save();renderMain();}
 function openMemo(id){S.currentMemo=S.memos.find(m=>m.id===id);S.view='editor';renderMain();}
 function saveBack(){const m=S.currentMemo;if(!m)return;m.title=document.getElementById('edTitle')?.value||'';m.content=document.getElementById('edContent')?.value||'';m.date=new Date();save();S.view='list';renderMain();}
-function renderImgs(){const m=S.currentMemo,c=document.getElementById('imgContainer');if(!c||!m.images)return;c.innerHTML=m.images.map((src,i)=>`<div class="img-block"><img src="${src}" alt="첨부 이미지"><button class="img-del" onclick="rmImg(${i})" aria-label="이미지 삭제"><i class="ti ti-x"></i></button></div>`).join('');}
+
+function renderImgs(){
+  const m=S.currentMemo,c=document.getElementById('imgContainer');if(!c||!m.images)return;
+  c.innerHTML='';
+  m.images.forEach((item,i)=>{
+    const src=typeof item==='string'?item:item.data;
+    const kb=typeof item==='object'&&item.compressedKB?item.compressedKB:null;
+    const block=document.createElement('div');block.className='img-block';
+    block.innerHTML=`<img src="${src}" alt="첨부 이미지" style="max-width:100%;border-radius:12px">
+      ${kb?`<span class="img-size-badge">📦 ${kb}KB로 압축됨</span>`:''}
+      <button class="img-del" onclick="rmImg(${i})" aria-label="이미지 삭제"><i class="ti ti-x"></i></button>`;
+    c.appendChild(block);
+  });
+}
 function rmImg(i){S.currentMemo.images.splice(i,1);save();renderImgs();}
 function insertPhoto(){document.getElementById('imgPicker').click();}
-document.getElementById('imgPicker').onchange=function(){Array.from(this.files).forEach(f=>{const r=new FileReader();r.onload=e=>{S.currentMemo.images.push(e.target.result);save();renderImgs();};r.readAsDataURL(f);});this.value='';};
+
+document.getElementById('imgPicker').onchange=async function(){
+  const files=Array.from(this.files);if(!files.length)return;
+  const c=document.getElementById('imgContainer');
+
+  // 압축 중 로딩 표시
+  const loading=document.createElement('div');
+  loading.className='img-loading';
+  loading.innerHTML=`<div class="spinner"></div><span>사진 압축 중... (${files.length}장)</span>`;
+  if(c)c.appendChild(loading);
+
+  for(const file of files){
+    const result=await compressImage(file);
+    S.currentMemo.images.push({
+      data:result.data,
+      originalKB:result.originalKB,
+      compressedKB:result.compressedKB,
+      w:result.w,h:result.h
+    });
+  }
+  save();
+  if(c&&loading.parentNode===c)c.removeChild(loading);
+  renderImgs();
+  this.value='';
+};
 
 function renderAll(){renderFolders();renderMain();}
-
-if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
-}
-
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}
 load();renderAll();
 </script>
 </body>
