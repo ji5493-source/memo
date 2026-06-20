@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="메모장">
+  <meta name="theme-color" content="#5B5FD9">
+  <link rel="manifest" href="manifest.json">
+  <title>메모장</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    :root{--accent:#5B5FD9;--bg:#f5f5f7;--card:#ffffff;--text:#1c1c1e;--text2:#6e6e73;--text3:#aeaeb2;--border:rgba(0,0,0,0.12);--border2:rgba(0,0,0,0.07)}
+    .dark{--bg:#1c1c1e;--card:#2c2c2e;--text:#f5f5f7;--text2:#98989e;--text3:#636366;--border:rgba(255,255,255,0.14);--border2:rgba(255,255,255,0.07)}
+    html,body{height:100%;overflow:hidden;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--text)}
+    body.dark{background:var(--bg)}
+    .app{height:100vh;display:flex;flex-direction:column;overflow:hidden;position:relative;transition:background .25s,color .25s}
+    .header{height:56px;display:flex;align-items:center;padding:0 12px;padding-top:env(safe-area-inset-top,0);gap:8px;background:var(--card);border-bottom:0.5px solid var(--border);flex-shrink:0;z-index:10;transition:background .25s}
+    .header-title{flex:1;font-size:17px;font-weight:600;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .icon-btn{width:38px;height:38px;border:none;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:10px;color:var(--accent)}
+    .icon-btn:hover{background:var(--border2)}
+    .icon-btn i{font-size:22px}
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:20;opacity:0;pointer-events:none;transition:opacity .22s}
+    .overlay.open{opacity:1;pointer-events:auto}
+    .sidebar{position:fixed;top:0;left:0;bottom:0;width:290px;background:var(--card);z-index:30;transform:translateX(-100%);transition:transform .22s cubic-bezier(.4,0,.2,1),background .25s;display:flex;flex-direction:column;border-right:0.5px solid var(--border)}
+    .sidebar.open{transform:translateX(0)}
+    .sb-header{padding:54px 14px 10px;border-bottom:0.5px solid var(--border)}
+    .sb-title{font-size:20px;font-weight:700;margin-bottom:12px}
+    .sb-actions{display:flex;gap:7px;margin-bottom:12px}
+    .sb-actions button{flex:1;border:0.5px solid var(--border);background:var(--bg);border-radius:10px;padding:8px 4px;font-size:11px;cursor:pointer;color:var(--text2);display:flex;flex-direction:column;align-items:center;gap:3px;transition:background .12s}
+    .sb-actions button:hover,.sb-actions button.active-btn{background:rgba(91,95,217,0.12);border-color:var(--accent);color:var(--accent)}
+    .sb-actions button i{font-size:19px;color:var(--accent)}
+    .sb-search{position:relative}
+    .sb-search input{width:100%;border:0.5px solid var(--border);border-radius:10px;padding:8px 12px 8px 32px;font-size:14px;background:var(--bg);color:var(--text);outline:none}
+    .sb-search .si{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:15px;color:var(--text3)}
+    .folder-list{flex:1;overflow-y:auto;padding:6px 0}
+    .folder-item{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;transition:background .12s}
+    .folder-item:hover{background:var(--border2)}
+    .folder-item.active{background:rgba(91,95,217,0.1)}
+    .folder-item.active .folder-name{color:var(--accent);font-weight:500}
+    .folder-item i.fi{font-size:19px;color:var(--accent);width:22px;text-align:center;flex-shrink:0}
+    .folder-name{flex:1;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .folder-count{font-size:12px;color:var(--text3);background:var(--border2);padding:2px 7px;border-radius:20px;flex-shrink:0}
+    .folder-edit-actions{display:flex;gap:2px;flex-shrink:0}
+    .folder-edit-actions button{border:none;background:none;cursor:pointer;padding:5px;border-radius:7px;font-size:17px;display:flex;align-items:center}
+    .folder-edit-actions button:hover{background:var(--border2)}
+    .btn-move-up,.btn-move-down{color:var(--text3)}
+    .btn-rename{color:var(--accent)}
+    .btn-del-folder{color:#E24B4A}
+    .add-folder-btn{margin:6px 12px 12px;border:0.5px dashed var(--border);background:none;border-radius:10px;padding:10px;font-size:14px;cursor:pointer;color:var(--text2);width:calc(100% - 24px);display:flex;align-items:center;justify-content:center;gap:6px}
+    .add-folder-btn:hover{background:var(--border2)}
+    .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+    .memo-list-view{flex:1;display:flex;flex-direction:column;overflow:hidden}
+    .ml-search{margin:10px 14px;position:relative}
+    .ml-search input{width:100%;border:0.5px solid var(--border);border-radius:10px;padding:8px 12px 8px 32px;font-size:14px;background:var(--card);color:var(--text);outline:none}
+    .ml-search .si{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:15px;color:var(--text3)}
+    .memo-items{flex:1;overflow-y:auto;padding:0 14px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+    .memo-card{background:var(--card);border:0.5px solid var(--border);border-radius:14px;margin-bottom:10px;overflow:hidden;display:flex;align-items:stretch;transition:border-color .15s,background .25s}
+    .memo-card:hover{border-color:var(--accent)}
+    .memo-card-body{flex:1;padding:14px;cursor:pointer;min-width:0}
+    .memo-card-title{font-size:15px;font-weight:600;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .memo-card-preview{font-size:13px;color:var(--text2);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin-bottom:7px;line-height:1.5}
+    .memo-card-meta{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px}
+    .memo-card-del{width:52px;flex-shrink:0;border:none;border-left:0.5px solid var(--border);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#E24B4A;font-size:20px;transition:background .15s}
+    .memo-card-del:active{background:rgba(226,75,74,0.15)}
+    .toast{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--card);border:0.5px solid var(--border);border-radius:14px;padding:12px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(0,0,0,0.15);z-index:40;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .18s}
+    .toast.show{opacity:1;pointer-events:auto}
+    .toast-msg{font-size:14px;color:var(--text)}
+    .toast-del{border:none;background:#E24B4A;color:#fff;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:500;cursor:pointer}
+    .toast-cancel{border:none;background:var(--border2);color:var(--text2);border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer}
+    .empty-state{text-align:center;padding:60px 20px;color:var(--text3)}
+    .empty-state i{font-size:50px;margin-bottom:12px;display:block}
+    .empty-state p{font-size:14px;line-height:1.6}
+    .editor-view{flex:1;display:flex;flex-direction:column;overflow:hidden}
+    .editor-meta{font-size:12px;color:var(--text3);padding:7px 16px 3px;display:flex;align-items:center;gap:5px;flex-shrink:0}
+    .editor-body{flex:1;overflow-y:auto;padding:10px 16px 20px}
+    .editor-title-input{width:100%;border:none;font-size:21px;font-weight:700;padding:4px 0 12px;border-bottom:0.5px solid var(--border);margin-bottom:12px;outline:none;background:transparent;color:var(--text)}
+    .editor-content{width:100%;min-height:200px;border:none;outline:none;font-size:15px;line-height:1.75;background:transparent;resize:none;color:var(--text);font-family:inherit}
+    .img-block{margin:10px 0;position:relative;display:block}
+    .img-block img{max-width:100%;display:block;border-radius:12px}
+    .img-del{position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.6);border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;color:#fff;font-size:14px;display:flex;align-items:center;justify-content:center}
+    .editor-toolbar{padding:10px 14px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));border-top:0.5px solid var(--border);display:flex;gap:8px;align-items:center;background:var(--card);flex-shrink:0;transition:background .25s}
+    .tb-btn{border:0.5px solid var(--border);background:none;border-radius:10px;padding:9px 14px;font-size:14px;cursor:pointer;color:var(--text2);display:flex;align-items:center;gap:6px}
+    .tb-btn i{font-size:17px;color:var(--accent)}
+    .tb-btn:hover{background:var(--border2)}
+    .settings-view{flex:1;overflow-y:auto;padding:14px;background:var(--bg);transition:background .25s}
+    .settings-section{margin-bottom:20px}
+    .settings-section-title{font-size:12px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;padding-left:4px}
+    .setting-row{display:flex;align-items:center;padding:13px 16px;background:var(--card);border:0.5px solid var(--border);border-radius:12px;margin-bottom:6px;cursor:pointer;gap:12px;transition:background .25s}
+    .setting-row:hover{background:var(--border2)}
+    .setting-row i{font-size:20px;color:var(--accent)}
+    .setting-label{flex:1;font-size:15px}
+    .setting-value{font-size:13px;color:var(--text3)}
+    .toggle{width:44px;height:26px;border-radius:13px;background:var(--border);position:relative;cursor:pointer;transition:background .2s;flex-shrink:0;border:none}
+    .toggle.on{background:var(--accent)}
+    .toggle::after{content:'';width:20px;height:20px;border-radius:50%;background:#fff;position:absolute;top:3px;left:3px;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,0.3)}
+    .toggle.on::after{left:21px}
+    .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:50;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+    .modal-bg.open{opacity:1;pointer-events:auto}
+    .modal{background:var(--card);border-radius:20px 20px 0 0;padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));width:100%;max-width:480px;transition:background .25s}
+    .modal h3{font-size:17px;font-weight:600;margin-bottom:14px;color:var(--text)}
+    .modal input{width:100%;border:0.5px solid var(--border);border-radius:10px;padding:11px 12px;font-size:16px;background:var(--bg);color:var(--text);outline:none;margin-bottom:12px}
+    .modal-btns{display:flex;gap:10px}
+    .modal-btns button{flex:1;padding:13px;border-radius:12px;border:none;font-size:15px;cursor:pointer;font-weight:500}
+    .btn-cancel{background:var(--border2);color:var(--text2)}
+    .btn-confirm{background:var(--accent);color:#fff}
+  </style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="header">
+    <button class="icon-btn" id="menuBtn" aria-label="메뉴"><i class="ti ti-menu-2"></i></button>
+    <span class="header-title" id="headerTitle">전체 메모</span>
+    <button class="icon-btn" id="headerRightBtn"><i class="ti ti-plus"></i></button>
+  </div>
+  <div class="overlay" id="overlay"></div>
+  <div class="sidebar" id="sidebar">
+    <div class="sb-header">
+      <div class="sb-title">📝 메모장</div>
+      <div class="sb-actions">
+        <button onclick="showSettings()"><i class="ti ti-settings"></i>설정</button>
+        <button onclick="focusSbSearch()"><i class="ti ti-search"></i>검색</button>
+        <button id="btnFolderEdit" onclick="toggleFolderEdit()"><i class="ti ti-edit"></i>폴더 편집</button>
+      </div>
+      <div class="sb-search"><i class="ti ti-search si"></i><input type="text" id="sbSearch" placeholder="폴더 검색..." oninput="filterFolders(this.value)"></div>
+    </div>
+    <div class="folder-list" id="folderList"></div>
+    <button class="add-folder-btn" onclick="openModal('add')"><i class="ti ti-folder-plus"></i>새 폴더 추가</button>
+  </div>
+  <div class="main" id="mainContent"></div>
+  <div class="toast" id="toast">
+    <span class="toast-msg">삭제할까요?</span>
+    <button class="toast-cancel" id="toastCancel">취소</button>
+    <button class="toast-del" id="toastDel">삭제</button>
+  </div>
+</div>
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h3 id="modalTitle">새 폴더</h3>
+    <input type="text" id="modalInput" placeholder="폴더 이름 입력...">
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal()">취소</button>
+      <button class="btn-confirm" id="modalConfirm">확인</button>
+    </div>
+  </div>
+</div>
+<input type="file" id="imgPicker" accept="image/*" multiple style="display:none">
+
+<script>
+const STORAGE_KEY='memoapp_v1';
+const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,6);
+const esc=s=>s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):'';
+const fmt=d=>{if(!d)return'';const now=new Date(),df=now-d;if(df<60000)return'방금 전';if(df<3600000)return Math.floor(df/60000)+'분 전';if(df<86400000)return Math.floor(df/3600000)+'시간 전';return(d.getMonth()+1)+'월 '+d.getDate()+'일 '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
+
+function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify({folders:S.folders,memos:S.memos,dark:dark}));}catch(e){}}
+function load(){try{const d=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');S.folders=d.folders||[{id:'f1',name:'업무',icon:'ti-briefcase'},{id:'f2',name:'개인',icon:'ti-user'},{id:'f3',name:'아이디어',icon:'ti-bulb'}];S.memos=(d.memos||[]).map(m=>({...m,date:new Date(m.date)}));if(d.dark)setDark(true);}catch(e){}}
+
+let dark=false;
+function setDark(on){dark=on;document.getElementById('app').classList.toggle('dark',on);document.body.classList.toggle('dark',on);const t=document.getElementById('darkToggle');if(t)t.classList.toggle('on',on);save();}
+function toggleDark(){setDark(!dark);}
+
+let pendingDelId=null,toastTimer=null;
+function showDelToast(id){pendingDelId=id;document.getElementById('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(hideToast,3000);}
+function hideToast(){document.getElementById('toast').classList.remove('show');pendingDelId=null;}
+document.getElementById('toastCancel').onclick=hideToast;
+document.getElementById('toastDel').onclick=()=>{if(!pendingDelId)return;S.memos=S.memos.filter(m=>m.id!==pendingDelId);save();hideToast();renderMain();};
+
+let S={view:'list',currentFolder:null,currentMemo:null,folderEdit:false,folders:[],memos:[]};
+
+let mMode='add',mTarget=null;
+function openModal(mode,id='',cur=''){mMode=mode;mTarget=id;document.getElementById('modalTitle').textContent=mode==='add'?'새 폴더':'폴더 이름 변경';document.getElementById('modalInput').value=cur;document.getElementById('modal').classList.add('open');setTimeout(()=>document.getElementById('modalInput').focus(),80);}
+function closeModal(){document.getElementById('modal').classList.remove('open');document.getElementById('modalInput').value='';}
+document.getElementById('modalConfirm').onclick=()=>{const name=document.getElementById('modalInput').value.trim();if(!name)return;if(mMode==='add'){const ic=['ti-folder','ti-star','ti-heart','ti-bookmark','ti-home','ti-camera'];S.folders.push({id:uid(),name,icon:ic[Math.floor(Math.random()*ic.length)]});}else{const f=S.folders.find(f=>f.id===mTarget);if(f)f.name=name;}save();closeModal();renderFolders();};
+document.getElementById('modalInput').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('modalConfirm').click();});
+document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)closeModal();});
+
+function renderFolders(filter=''){
+  const list=document.getElementById('folderList');
+  const items=[{id:'all',name:'전체 메모',icon:'ti-notes'},...S.folders].filter(f=>f.id==='all'||f.name.includes(filter));
+  list.innerHTML=items.map((f,idx)=>{
+    const cnt=f.id==='all'?S.memos.length:S.memos.filter(m=>m.folder===f.id).length;
+    const active=(S.currentFolder===null&&f.id==='all')||S.currentFolder===f.id?'active':'';
+    const ri=idx-1;let ed='';
+    if(S.folderEdit&&f.id!=='all'){
+      const iF=ri===0,iL=ri===S.folders.length-1;
+      ed=`<div class="folder-edit-actions">
+        <button class="btn-move-up" onclick="mvFolder('${f.id}',-1,event)" ${iF?'style="opacity:.3;pointer-events:none"':''} title="위로"><i class="ti ti-chevron-up"></i></button>
+        <button class="btn-move-down" onclick="mvFolder('${f.id}',1,event)" ${iL?'style="opacity:.3;pointer-events:none"':''} title="아래로"><i class="ti ti-chevron-down"></i></button>
+        <button class="btn-rename" onclick="openModal('rename','${f.id}','${f.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}');event.stopPropagation()" title="이름 변경"><i class="ti ti-pencil"></i></button>
+        <button class="btn-del-folder" onclick="delFolder('${f.id}',event)" title="삭제"><i class="ti ti-trash"></i></button>
+      </div>`;
+    }
+    return`<div class="folder-item ${active}" onclick="selFolder('${f.id}')"><i class="ti ${f.icon} fi"></i><span class="folder-name">${esc(f.name)}</span>${!S.folderEdit?`<span class="folder-count">${cnt}</span>`:''}${ed}</div>`;
+  }).join('');
+}
+function mvFolder(id,dir,e){e.stopPropagation();const i=S.folders.findIndex(f=>f.id===id),ni=i+dir;if(ni<0||ni>=S.folders.length)return;[S.folders[i],S.folders[ni]]=[S.folders[ni],S.folders[i]];save();renderFolders();}
+function delFolder(id,e){e.stopPropagation();S.folders=S.folders.filter(f=>f.id!==id);S.memos=S.memos.filter(m=>m.folder!==id);if(S.currentFolder===id)S.currentFolder=null;save();renderFolders();renderMain();}
+function toggleFolderEdit(){S.folderEdit=!S.folderEdit;document.getElementById('btnFolderEdit').classList.toggle('active-btn',S.folderEdit);renderFolders();}
+function selFolder(id){S.currentFolder=id==='all'?null:id;S.view='list';closeSB();renderAll();}
+function filterFolders(v){renderFolders(v);}
+function focusSbSearch(){document.getElementById('sbSearch').focus();}
+function openSB(){document.getElementById('sidebar').classList.add('open');document.getElementById('overlay').classList.add('open');}
+function closeSB(){document.getElementById('sidebar').classList.remove('open');document.getElementById('overlay').classList.remove('open');}
+document.getElementById('overlay').onclick=closeSB;
+document.getElementById('menuBtn').onclick=()=>{renderFolders();openSB();};
+
+function renderMain(){
+  const mc=document.getElementById('mainContent'),hT=document.getElementById('headerTitle'),hR=document.getElementById('headerRightBtn');
+  if(S.view==='list'){
+    const folder=S.folders.find(f=>f.id===S.currentFolder);
+    hT.textContent=folder?folder.name:'전체 메모';
+    hR.innerHTML='<i class="ti ti-plus"></i>';hR.onclick=newMemo;
+    mc.innerHTML=`<div class="memo-list-view"><div class="ml-search"><i class="ti ti-search si"></i><input type="text" id="mlSearch" placeholder="메모 검색..." oninput="filterMemos(this.value)"></div><div class="memo-items" id="memoItems"></div></div>`;
+    renderMemoItems(getMemos());
+  } else if(S.view==='editor'){
+    const m=S.currentMemo,folder=S.folders.find(f=>f.id===m.folder);
+    hT.textContent=folder?folder.name:'메모';
+    hR.innerHTML='<i class="ti ti-check"></i>';hR.onclick=saveBack;
+    mc.innerHTML=`<div class="editor-view"><div class="editor-meta"><i class="ti ti-clock" style="font-size:12px"></i><span>${fmt(m.date)}</span></div><div class="editor-body"><input class="editor-title-input" id="edTitle" placeholder="제목" value="${esc(m.title)}"><textarea class="editor-content" id="edContent" placeholder="내용을 입력하세요...">${esc(m.content)}</textarea><div id="imgContainer"></div></div><div class="editor-toolbar"><button class="tb-btn" style="border:none" onclick="saveBack()"><i class="ti ti-arrow-left" style="font-size:20px;color:var(--accent)"></i><span style="font-size:14px;color:var(--text2)">뒤로</span></button><button class="tb-btn" onclick="insertPhoto()"><i class="ti ti-photo"></i>사진 추가</button><button class="tb-btn" onclick="saveBack()"><i class="ti ti-device-floppy"></i>저장</button></div></div>`;
+    renderImgs();
+    const ta=document.getElementById('edContent');ta.style.height='auto';ta.style.height=ta.scrollHeight+'px';ta.oninput=function(){this.style.height='auto';this.style.height=this.scrollHeight+'px';};
+  } else if(S.view==='settings'){
+    hT.textContent='설정';hR.innerHTML='<i class="ti ti-arrow-left"></i>';hR.onclick=()=>{S.view='list';renderMain();};
+    mc.innerHTML=`<div class="settings-view"><div class="settings-section"><div class="settings-section-title">표시</div><div class="setting-row" onclick="toggleDark()"><i class="ti ti-moon"></i><span class="setting-label">다크 모드</span><button id="darkToggle" class="toggle ${dark?'on':''}" aria-label="다크모드"></button></div><div class="setting-row" onclick="this.querySelector('.toggle').classList.toggle('on')"><i class="ti ti-clock"></i><span class="setting-label">날짜/시간 표시</span><button class="toggle on" aria-label="날짜시간"></button></div></div><div class="settings-section"><div class="settings-section-title">데이터</div><div class="setting-row" onclick="exportData()"><i class="ti ti-download"></i><span class="setting-label">메모 백업 (JSON)</span><span class="setting-value"><i class="ti ti-chevron-right"></i></span></div></div><div class="settings-section"><div class="settings-section-title">정보</div><div class="setting-row"><i class="ti ti-notes"></i><span class="setting-label">총 메모 수</span><span class="setting-value">${S.memos.length}개</span></div><div class="setting-row"><i class="ti ti-folder"></i><span class="setting-label">총 폴더 수</span><span class="setting-value">${S.folders.length}개</span></div></div></div>`;
+  }
+}
+
+function exportData(){const blob=new Blob([JSON.stringify({folders:S.folders,memos:S.memos},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='메모장_백업_'+new Date().toLocaleDateString('ko-KR').replace(/\. /g,'-').replace('.','')+'.json';a.click();}
+function getMemos(){return S.memos.filter(m=>!S.currentFolder||m.folder===S.currentFolder);}
+function renderMemoItems(memos){
+  const cont=document.getElementById('memoItems');if(!cont)return;
+  const sorted=[...memos].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  if(!sorted.length){cont.innerHTML=`<div class="empty-state"><i class="ti ti-notes"></i><p>메모가 없어요<br>오른쪽 위 <strong>+</strong> 버튼으로 추가하세요</p></div>`;return;}
+  cont.innerHTML='';
+  sorted.forEach(m=>{
+    const card=document.createElement('div');card.className='memo-card';
+    const body=document.createElement('div');body.className='memo-card-body';
+    body.innerHTML=`<div class="memo-card-title">${esc(m.title)||'(제목 없음)'}</div><div class="memo-card-preview">${esc(m.content)||'내용 없음'}</div><div class="memo-card-meta"><i class="ti ti-clock" style="font-size:11px"></i>${fmt(new Date(m.date))}${m.images&&m.images.length?` &nbsp;·&nbsp; <i class="ti ti-photo" style="font-size:11px"></i> 사진 ${m.images.length}장`:''}</div>`;
+    body.onclick=()=>openMemo(m.id);
+    const del=document.createElement('button');del.className='memo-card-del';del.setAttribute('aria-label','삭제');del.innerHTML='<i class="ti ti-trash"></i>';
+    del.onclick=()=>showDelToast(m.id);
+    card.appendChild(body);card.appendChild(del);cont.appendChild(card);
+  });
+}
+function filterMemos(v){const base=getMemos();renderMemoItems(v?base.filter(m=>m.title.includes(v)||m.content.includes(v)):base);}
+function newMemo(){const fid=S.currentFolder||(S.folders[0]?S.folders[0].id:null);if(!fid)return;const m={id:uid(),folder:fid,title:'',content:'',images:[],date:new Date()};S.memos.push(m);S.currentMemo=m;S.view='editor';save();renderMain();}
+function openMemo(id){S.currentMemo=S.memos.find(m=>m.id===id);S.view='editor';renderMain();}
+function saveBack(){const m=S.currentMemo;if(!m)return;m.title=document.getElementById('edTitle')?.value||'';m.content=document.getElementById('edContent')?.value||'';m.date=new Date();save();S.view='list';renderMain();}
+function showSettings(){closeSB();S.view='settings';renderMain();}
+function renderImgs(){const m=S.currentMemo,c=document.getElementById('imgContainer');if(!c||!m.images)return;c.innerHTML=m.images.map((src,i)=>`<div class="img-block"><img src="${src}" alt="첨부 이미지"><button class="img-del" onclick="rmImg(${i})" aria-label="이미지 삭제"><i class="ti ti-x"></i></button></div>`).join('');}
+function rmImg(i){S.currentMemo.images.splice(i,1);save();renderImgs();}
+function insertPhoto(){document.getElementById('imgPicker').click();}
+document.getElementById('imgPicker').onchange=function(){Array.from(this.files).forEach(f=>{const r=new FileReader();r.onload=e=>{S.currentMemo.images.push(e.target.result);save();renderImgs();};r.readAsDataURL(f);});this.value='';};
+
+function renderAll(){renderFolders();renderMain();}
+
+// 서비스워커 등록
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+}
+
+load();renderAll();
+</script>
+</body>
+</html>
