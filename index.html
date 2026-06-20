@@ -98,6 +98,9 @@
     .toggle.on{background:var(--accent)}
     .toggle::after{content:'';width:20px;height:20px;border-radius:50%;background:#fff;position:absolute;top:3px;left:3px;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,0.3)}
     .toggle.on::after{left:21px}
+    /* 백업 안내 박스 */
+    .info-box{background:rgba(91,95,217,0.08);border:0.5px solid rgba(91,95,217,0.25);border-radius:12px;padding:12px 14px;margin-bottom:6px;font-size:13px;color:var(--text2);line-height:1.6}
+    .info-box strong{color:var(--accent)}
     .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:50;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
     .modal-bg.open{opacity:1;pointer-events:auto}
     .modal{background:var(--card);border-radius:20px 20px 0 0;padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));width:100%;max-width:480px;transition:background .25s}
@@ -107,6 +110,10 @@
     .modal-btns button{flex:1;padding:13px;border-radius:12px;border:none;font-size:15px;cursor:pointer;font-weight:500}
     .btn-cancel{background:var(--border2);color:var(--text2)}
     .btn-confirm{background:var(--accent);color:#fff}
+    /* 가져오기 성공 메시지 */
+    .import-result{display:none;margin-top:8px;padding:10px 14px;border-radius:10px;font-size:13px;font-weight:500}
+    .import-result.ok{background:rgba(29,158,117,0.12);color:#0F6E56;display:block}
+    .import-result.err{background:rgba(226,75,74,0.12);color:#A32D2D;display:block}
   </style>
 </head>
 <body>
@@ -137,6 +144,7 @@
     <button class="toast-del" id="toastDel">삭제</button>
   </div>
 </div>
+
 <div class="modal-bg" id="modal">
   <div class="modal">
     <h3 id="modalTitle">새 폴더</h3>
@@ -147,7 +155,9 @@
     </div>
   </div>
 </div>
+
 <input type="file" id="imgPicker" accept="image/*" multiple style="display:none">
+<input type="file" id="importPicker" accept=".json" style="display:none">
 
 <script>
 const STORAGE_KEY='memoapp_v1';
@@ -156,7 +166,14 @@ const esc=s=>s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
 const fmt=d=>{if(!d)return'';const now=new Date(),df=now-d;if(df<60000)return'방금 전';if(df<3600000)return Math.floor(df/60000)+'분 전';if(df<86400000)return Math.floor(df/3600000)+'시간 전';return(d.getMonth()+1)+'월 '+d.getDate()+'일 '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
 
 function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify({folders:S.folders,memos:S.memos,dark:dark}));}catch(e){}}
-function load(){try{const d=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');S.folders=d.folders||[{id:'f1',name:'업무',icon:'ti-briefcase'},{id:'f2',name:'개인',icon:'ti-user'},{id:'f3',name:'아이디어',icon:'ti-bulb'}];S.memos=(d.memos||[]).map(m=>({...m,date:new Date(m.date)}));if(d.dark)setDark(true);}catch(e){}}
+function load(){
+  try{
+    const d=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');
+    S.folders=d.folders||[{id:'f1',name:'업무',icon:'ti-briefcase'},{id:'f2',name:'개인',icon:'ti-user'},{id:'f3',name:'아이디어',icon:'ti-bulb'}];
+    S.memos=(d.memos||[]).map(m=>({...m,date:new Date(m.date)}));
+    if(d.dark)setDark(true);
+  }catch(e){}
+}
 
 let dark=false;
 function setDark(on){dark=on;document.getElementById('app').classList.toggle('dark',on);document.body.classList.toggle('dark',on);const t=document.getElementById('darkToggle');if(t)t.classList.toggle('on',on);save();}
@@ -170,6 +187,43 @@ document.getElementById('toastDel').onclick=()=>{if(!pendingDelId)return;S.memos
 
 let S={view:'list',currentFolder:null,currentMemo:null,folderEdit:false,folders:[],memos:[]};
 
+// ── 백업 / 가져오기 ──
+function exportData(){
+  const blob=new Blob([JSON.stringify({folders:S.folders,memos:S.memos},null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  const today=new Date();
+  a.download=`메모장백업_${today.getFullYear()}${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}.json`;
+  a.click();
+}
+
+function importData(){document.getElementById('importPicker').click();}
+
+document.getElementById('importPicker').onchange=function(){
+  const file=this.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      if(!data.folders||!data.memos)throw new Error('형식 오류');
+      S.folders=data.folders;
+      S.memos=data.memos.map(m=>({...m,date:new Date(m.date)}));
+      save();
+      renderAll();
+      // 설정 화면 다시 그려서 결과 표시
+      showSettings();
+      const r=document.getElementById('importResult');
+      if(r){r.className='import-result ok';r.textContent=`✅ 성공! 메모 ${S.memos.length}개, 폴더 ${S.folders.length}개를 불러왔어요.`;}
+    }catch(err){
+      const r=document.getElementById('importResult');
+      if(r){r.className='import-result err';r.textContent='❌ 파일을 읽을 수 없어요. 백업 파일이 맞는지 확인해주세요.';}
+    }
+  };
+  reader.readAsText(file);
+  this.value='';
+};
+
+// ── 모달 ──
 let mMode='add',mTarget=null;
 function openModal(mode,id='',cur=''){mMode=mode;mTarget=id;document.getElementById('modalTitle').textContent=mode==='add'?'새 폴더':'폴더 이름 변경';document.getElementById('modalInput').value=cur;document.getElementById('modal').classList.add('open');setTimeout(()=>document.getElementById('modalInput').focus(),80);}
 function closeModal(){document.getElementById('modal').classList.remove('open');document.getElementById('modalInput').value='';}
@@ -177,6 +231,7 @@ document.getElementById('modalConfirm').onclick=()=>{const name=document.getElem
 document.getElementById('modalInput').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('modalConfirm').click();});
 document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)closeModal();});
 
+// ── 사이드바 ──
 function renderFolders(filter=''){
   const list=document.getElementById('folderList');
   const items=[{id:'all',name:'전체 메모',icon:'ti-notes'},...S.folders].filter(f=>f.id==='all'||f.name.includes(filter));
@@ -207,6 +262,7 @@ function closeSB(){document.getElementById('sidebar').classList.remove('open');d
 document.getElementById('overlay').onclick=closeSB;
 document.getElementById('menuBtn').onclick=()=>{renderFolders();openSB();};
 
+// ── 메인 ──
 function renderMain(){
   const mc=document.getElementById('mainContent'),hT=document.getElementById('headerTitle'),hR=document.getElementById('headerRightBtn');
   if(S.view==='list'){
@@ -224,11 +280,42 @@ function renderMain(){
     const ta=document.getElementById('edContent');ta.style.height='auto';ta.style.height=ta.scrollHeight+'px';ta.oninput=function(){this.style.height='auto';this.style.height=this.scrollHeight+'px';};
   } else if(S.view==='settings'){
     hT.textContent='설정';hR.innerHTML='<i class="ti ti-arrow-left"></i>';hR.onclick=()=>{S.view='list';renderMain();};
-    mc.innerHTML=`<div class="settings-view"><div class="settings-section"><div class="settings-section-title">표시</div><div class="setting-row" onclick="toggleDark()"><i class="ti ti-moon"></i><span class="setting-label">다크 모드</span><button id="darkToggle" class="toggle ${dark?'on':''}" aria-label="다크모드"></button></div><div class="setting-row" onclick="this.querySelector('.toggle').classList.toggle('on')"><i class="ti ti-clock"></i><span class="setting-label">날짜/시간 표시</span><button class="toggle on" aria-label="날짜시간"></button></div></div><div class="settings-section"><div class="settings-section-title">데이터</div><div class="setting-row" onclick="exportData()"><i class="ti ti-download"></i><span class="setting-label">메모 백업 (JSON)</span><span class="setting-value"><i class="ti ti-chevron-right"></i></span></div></div><div class="settings-section"><div class="settings-section-title">정보</div><div class="setting-row"><i class="ti ti-notes"></i><span class="setting-label">총 메모 수</span><span class="setting-value">${S.memos.length}개</span></div><div class="setting-row"><i class="ti ti-folder"></i><span class="setting-label">총 폴더 수</span><span class="setting-value">${S.folders.length}개</span></div></div></div>`;
+    mc.innerHTML=`<div class="settings-view">
+      <div class="settings-section">
+        <div class="settings-section-title">표시</div>
+        <div class="setting-row" onclick="toggleDark()">
+          <i class="ti ti-moon"></i><span class="setting-label">다크 모드</span>
+          <button id="darkToggle" class="toggle ${dark?'on':''}" aria-label="다크모드"></button>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title">📦 백업 &amp; 가져오기</div>
+        <div class="info-box">
+          폰을 바꿀 때 👉 <strong>백업 저장</strong> → 카카오톡 나에게 보내기 또는 구글 드라이브 저장<br>
+          새 폰에서 👉 <strong>가져오기</strong> 버튼으로 그 파일 선택하면 복구 완료!
+        </div>
+        <div class="setting-row" onclick="exportData()">
+          <i class="ti ti-download"></i>
+          <span class="setting-label">백업 저장하기</span>
+          <span class="setting-value" style="font-size:12px">파일로 저장</span>
+        </div>
+        <div class="setting-row" onclick="importData()">
+          <i class="ti ti-upload"></i>
+          <span class="setting-label">가져오기 (복구)</span>
+          <span class="setting-value" style="font-size:12px">백업 파일 선택</span>
+        </div>
+        <div id="importResult" class="import-result"></div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title">정보</div>
+        <div class="setting-row"><i class="ti ti-notes"></i><span class="setting-label">저장된 메모</span><span class="setting-value">${S.memos.length}개</span></div>
+        <div class="setting-row"><i class="ti ti-folder"></i><span class="setting-label">폴더 수</span><span class="setting-value">${S.folders.length}개</span></div>
+      </div>
+    </div>`;
   }
 }
 
-function exportData(){const blob=new Blob([JSON.stringify({folders:S.folders,memos:S.memos},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='메모장_백업_'+new Date().toLocaleDateString('ko-KR').replace(/\. /g,'-').replace('.','')+'.json';a.click();}
+function showSettings(){closeSB();S.view='settings';renderMain();}
 function getMemos(){return S.memos.filter(m=>!S.currentFolder||m.folder===S.currentFolder);}
 function renderMemoItems(memos){
   const cont=document.getElementById('memoItems');if(!cont)return;
@@ -249,7 +336,6 @@ function filterMemos(v){const base=getMemos();renderMemoItems(v?base.filter(m=>m
 function newMemo(){const fid=S.currentFolder||(S.folders[0]?S.folders[0].id:null);if(!fid)return;const m={id:uid(),folder:fid,title:'',content:'',images:[],date:new Date()};S.memos.push(m);S.currentMemo=m;S.view='editor';save();renderMain();}
 function openMemo(id){S.currentMemo=S.memos.find(m=>m.id===id);S.view='editor';renderMain();}
 function saveBack(){const m=S.currentMemo;if(!m)return;m.title=document.getElementById('edTitle')?.value||'';m.content=document.getElementById('edContent')?.value||'';m.date=new Date();save();S.view='list';renderMain();}
-function showSettings(){closeSB();S.view='settings';renderMain();}
 function renderImgs(){const m=S.currentMemo,c=document.getElementById('imgContainer');if(!c||!m.images)return;c.innerHTML=m.images.map((src,i)=>`<div class="img-block"><img src="${src}" alt="첨부 이미지"><button class="img-del" onclick="rmImg(${i})" aria-label="이미지 삭제"><i class="ti ti-x"></i></button></div>`).join('');}
 function rmImg(i){S.currentMemo.images.splice(i,1);save();renderImgs();}
 function insertPhoto(){document.getElementById('imgPicker').click();}
@@ -257,7 +343,6 @@ document.getElementById('imgPicker').onchange=function(){Array.from(this.files).
 
 function renderAll(){renderFolders();renderMain();}
 
-// 서비스워커 등록
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 }
