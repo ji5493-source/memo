@@ -375,7 +375,7 @@ function openModal(mode,data={}){
     box.innerHTML=`<h3>${data.id?'폴더 이름 변경':'새 폴더'}</h3>
       <input type="text" id="modalInput" placeholder="폴더 이름 입력..." value="${esc(data.name||'')}">
       <div class="modal-btns"><button class="btn-cancel" onclick="closeModal()">취소</button>
-      <button class="btn-confirm" onclick="confirmFolder('${data.id||'')">확인</button></div>`;
+      <button class="btn-confirm" onclick="confirmFolder('${data.id||''}')">확인</button></div>`;
   } else if(mode==='lock-set'){
     box.innerHTML=`<h3>잠금 비밀번호 설정</h3>
       <input type="password" id="modalInput" placeholder="숫자 4자리" maxlength="4" pattern="[0-9]*" inputmode="numeric">
